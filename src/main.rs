@@ -10,6 +10,7 @@ fn main() {
 
     let options = eframe::NativeOptions {
         initial_window_size: Some(egui::vec2(800.0, 600.0)),
+        min_window_size: Some(egui::vec2(400.0, 300.0)),
         default_theme: Theme::Light,
         ..Default::default()
     };
@@ -23,6 +24,7 @@ fn main() {
 
 struct App {
     position: Pos2,
+    rect: Rect,
     last_update_time: f64,
     animation_enabled: bool,
     antialiasing_enabled: bool,
@@ -38,6 +40,7 @@ impl Default for App {
 
         Self {
             position: Pos2::new(0.0, 0.0),
+            rect: Rect::EVERYTHING,
             last_update_time: 0.0,
             animation_enabled: true,
             antialiasing_enabled: false,
@@ -62,12 +65,17 @@ impl App {
 
             let time = ui.input().time;
 
-            let size = ui.available_size();
+            let size = ui.available_size().floor();
             let (_, rect) = ui.allocate_space(size);
+
+            self.rect = Rect {
+                min: rect.min.floor(),
+                max: rect.max.floor(),
+            };
 
             let to_screen = emath::RectTransform::from_to(
                 Rect::from_x_y_ranges(0.0..=size.x, 0.0..=size.y),
-                rect,
+                self.rect,
             );
 
             let thickness = 1.0;
@@ -80,8 +88,8 @@ impl App {
                 let dt = time - self.last_update_time;
 
                 if dt > 1.0 / self.speed as f64 {
-                    x = (x + 1.0) % size.x;
-                    y = (y + 1.0) % size.y;
+                    x = ((x + 1.0) % size.x).floor();
+                    y = ((y + 1.0) % size.y).floor();
                     self.last_update_time = time;
                 }
 
@@ -120,28 +128,38 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.toggle_antialising(ctx, self.antialiasing_enabled);
 
-        egui::SidePanel::left("left_panel").show(ctx, |ui| {
-            global_dark_light_mode_buttons(ui);
-            ui.checkbox(&mut self.antialiasing_enabled, "Anti-aliasing");
+        egui::SidePanel::left("left_panel")
+            .resizable(false)
+            .show(ctx, |ui| {
+                global_dark_light_mode_buttons(ui);
+                ui.checkbox(&mut self.antialiasing_enabled, "Anti-aliasing");
 
-            ui.separator();
+                ui.separator();
 
-            ui.checkbox(&mut self.animation_enabled, "Animation");
-            ui.checkbox(&mut self.display_horizontal, "Horizontal");
-            ui.checkbox(&mut self.display_vertical, "Vertical");
+                ui.checkbox(&mut self.animation_enabled, "Animation");
+                ui.checkbox(&mut self.display_horizontal, "Horizontal");
+                ui.checkbox(&mut self.display_vertical, "Vertical");
 
-            ui.separator();
+                ui.separator();
 
-            ui.label(format!("x:{0} y:{1}", self.position.x, self.position.y));
+                let lt = &self.rect.min;
+                let rb = &self.rect.max;
 
-            egui::ComboBox::from_label("Speed")
-                .selected_text(format!("{:?} px/s", self.speed))
-                .show_ui(ui, |ui| {
-                    for speed in self.speeds.iter() {
-                        ui.selectable_value(&mut self.speed, *speed, format!("{:?} px/s", speed));
-                    }
-                });
-        });
+                ui.label(format!("area: ({},{}) ({},{})", lt.x, lt.y, rb.x, rb.y));
+                ui.label(format!("pos: ({},{})", self.position.x, self.position.y));
+
+                egui::ComboBox::from_label("Speed")
+                    .selected_text(format!("{:?} px/s", self.speed))
+                    .show_ui(ui, |ui| {
+                        for speed in self.speeds.iter() {
+                            ui.selectable_value(
+                                &mut self.speed,
+                                *speed,
+                                format!("{:?} px/s", speed),
+                            );
+                        }
+                    });
+            });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             self.main_ui(ui);
